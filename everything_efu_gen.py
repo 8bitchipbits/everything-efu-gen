@@ -18,7 +18,8 @@ import argparse
 import csv
 import enum
 import os
-import ruamel.yaml
+import yaml
+import re
 
 from itertools import chain
 from pathlib import PureWindowsPath
@@ -72,13 +73,13 @@ def windows_attrs(path, name, is_dir):
 def generate_config():
   """
   Generate a sample configuration.
-  """
-  return ruamel.yaml.safe_dump({
+  """  
+  return yaml.dump({
       'directories': [
         '/mnt/mydisk',
         '/mnt/myseconddisk',
       ]
-  }, default_flow_style=False, indent=4, block_seq_indent=2)
+  }, default_flow_style=False, indent=4)
 
 
 def scan(path):
@@ -88,7 +89,7 @@ def scan(path):
   """
   outpath_work = os.path.join(path, '.everything_index.efu-scanning')
   outpath = os.path.join(path, '.everything_index.efu')
-  with open(outpath_work, 'w') as outfile:
+  with open(outpath_work, 'w', newline='') as outfile:
     writer = csv.writer(outfile, quoting=csv.QUOTE_NONE)
     writer.writerow(['Filename', 'Size', 'Date Modified', 'Date Created', 'Attributes'])
 
@@ -99,8 +100,14 @@ def scan(path):
     # unqouted for remaining lines).
     writer = csv.writer(outfile, quoting=csv.QUOTE_NONNUMERIC)
 
-    for dirpath, dirnames, filenames in os.walk(path):
+    for dirpath, dirnames, filenames in os.walk(path, topdown=True):
       for name, is_dir in chain(zip(filenames, [False] * len(filenames)), zip(dirnames, [True] * len(filenames))):
+        if re.search('RECYCLE\.BIN',name):
+          continue
+        if name.startswith(('$', 'System Volume Information')):
+          continue
+        if dirpath.startswith(('$', 'System Volume Information')):
+          continue
         p = os.path.join(dirpath, name)
 
         try:
@@ -122,7 +129,8 @@ def scan(path):
 def main():
   parser = argparse.ArgumentParser()
   mut_excl_group = parser.add_mutually_exclusive_group(required=True)
-  mut_excl_group.add_argument('config', metavar='CONFIG', help="config file", type=open, nargs='*', default=[])
+  mut_excl_group.add_argument('--config', metavar='CONFIG', help="config file", type=open, nargs='*', default=[])
+  mut_excl_group.add_argument('-d','--directory', action='store', help="directory")
   mut_excl_group.add_argument('--print-sample-config', help="prints a sample config to stdout", required=False, action='store_true')
   args = parser.parse_args()
 
@@ -130,10 +138,14 @@ def main():
     print(generate_config(), end='')
     return
 
-
+  if args.directory:
+    print(args.directory, end='')
+    scan(args.directory)
+    return
+    
   dirs = set()
   for f in args.config:
-    config = ruamel.yaml.safe_load(f)
+    config = yaml.safe_load(f)
     dirs.update(config['directories'])
 
   for path in dirs:
