@@ -11,7 +11,6 @@ network.
 Requirements
 ------------
 * Python >= 3.4
-* ruamel.yaml
 
 Installation
 ------------
